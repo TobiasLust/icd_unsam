@@ -1,0 +1,229 @@
+---
+title: "Clase 2 - Manipulación de datos"
+format: 
+  html:
+    toc: true
+editor: visual
+---
+
+```{r setup, include=TRUE}
+# esto es para que el qmd muestre el código con los resultados 
+knitr::opts_chunk$set(echo = TRUE)
+
+#importamos las bibliotecas que vamos a usar
+library(tidyverse)
+library(nycflights13)
+```
+
+## La clase de hoy
+
+-   La semana pasada aprendimos a visualizar datos para encontrar patrones simples.
+
+-   Además de esta tarea de descubrimiento, muchas veces es interesante poder responder preguntas específicas.
+
+-   Esta semana vamos a aprender a responder preguntas sencillas, cuyas respuestas se encuentran disponibles directamente a partir del data set que tengamos a mano.
+
+-   Más adelante vamos a aprender a dar respuestas a preguntas más complejas, que requieran juntar datos de distintas fuentes, e incluso preguntas que a primera vista no podemos responder directamente con el data set.
+
+## El data set de vuelos
+
+Cuando se importa la biblioteca de los vuelos de NY del año 2013 con `library(nycflights13)` vienen varios data sets en particular trabajaremos con la tabla *flights.* Podemos echar un vistazo a la documentación con el comando `help(...)`
+
+```{r flights, echo = TRUE}
+
+# Si queremos ver todas las tablas que vienen incluidas podemos usar
+#data(package = "nycflights13")) 
+
+help(flights)
+```
+
+Tambien recordemos el `glimpse(...)` .
+
+```{r flights, echo = TRUE}
+#Si quisiésemos acceder solamente a esta tabla en vez de cargar todo podemos acceder con
+#nycflights13::flights
+
+glimpse(flights)
+```
+
+## Preguntas {.build}
+
+**¿Se acuerdan cuáles eran las unidades de este data set?**
+
+**Entonces**, juguemos a hacer preguntas que sean sobre vuelos:
+
+1.  ¿Cuál es el vuelo que mayor retraso en la salida sufrió y cuánto fue ese retraso?
+
+2.  Encontrar los cinco vuelos más retrasados.
+
+3.  ¿Cuántos vuelos salieron el 20 de marzo?
+
+4.  ¿Cuáles son los cuatro vuelos que más tiempo ganaron en el aire?
+
+**¿Y si quiero hacer preguntas sobre otras cosas?**
+
+5.  ¿Qué aeropuerto de salida tiene más vuelos?
+
+6.  ¿Qué destino recibe más vuelos desde JFK?
+
+7.  ¿Qué mes del año tiene más vuelos?
+
+## Respuestas
+
+### 1. ¿Cuál es el vuelo que mayor retraso en la salida sufrió y cuánto fue ese retraso?
+
+Recordemos cuando vimos la documentación, hay una columna en particular que nos puede servir, n *dep_delay* estaba el retraso en la salida.
+
+Esta pregunta pude responderse parcialmente usando usando la función del paquete `base`, `max`. Recuerden que hay que incluir el argumento `na.rm=TRUE` (o `na.rm=T`) para no considerar los valores faltantes.
+
+```{r}
+flights$dep_delay
+```
+
+```{r}
+max(flights$dep_delay, na.rm=TRUE)
+```
+
+Vemos que el vuelo con mayor retraso tiene 1301 minutos de retraso.
+
+Pero esto no responde cuál es el vuelo en cuestión. Sin salir de R base, podemos averiguar eso usando la función `which` (¿cuál?) para encontrar el índice en el que el retraso es igual al valor máximo.
+
+```{r}
+i <- which(flights$dep_delay == max(flights$dep_delay, na.rm=TRUE))
+flights[i,]
+```
+
+Si bien esto funciona, es bastante engorroso. En `dplyr` (parte de `tidyverse`) hay formas mucho más convenientes de hacerlo, con las funciones de la familia `slice`. Usamos la función `slice_max` e indicamos qué variable se usa para ordenar.
+
+```{r}
+slice_max(flights, dep_delay, n=10)
+```
+
+Así como está `slice_max`, existe `slice_min`, que hace lo mismo pero encuentra los mínimos.
+
+```{r}
+slice_min(flights, dep_delay, n=10)
+```
+
+### 2. Encontrar los cinco vuelos más retrasados.
+
+Además, `slice_max` y `slice_min` toman un argumento que indica cuántos líneas del dataset ordenado devolver. De forma que esto es automático.
+
+```{r}
+slice_max(flights, dep_delay, n=5)
+```
+
+### 3. ¿Cuántos vuelos salieron el 20 de marzo?
+
+Para responder a esta pregunta, tenemos que aprender el verbo `filter` (filtrar), para quedarnos solamente con los vuelos que tengan `month==3` y `day==20`. **Nota**: en general, el operador "igualdad" es `==`, porque se reserva `=` para hacer asignaciones.
+
+```{r}
+filter(flights, month==3, day==20)
+```
+
+Este comando me devuelve una tabla, con los vuelos que salieron el 20 de marzo. Podemos ver que este conjunto tiene `nrow(filter(flights, month==3, day==20))` filas.
+
+Con `filter` se puede usar una variedad de condiciones, siempre y cuando devuelvan un vector *lógico*, o sea con elementos booleanos (ver cápsula 2).
+
+### 4. ¿Cuáles son los cuatro vuelos que más tiempo ganaron en el aire?
+
+Acá antes de mandarnos a hacer cosas pensemos un poco, ¿qué significa "tiempo ganado en el aire"? ¿tenemos una columna que nos de esta información? (**SPOILER**: No).
+
+Acá es cuando tenemos que empezar a partir el trabajo, si tuviésemos una columna que sea "tiempo.ganado" ya sabríamos como sacar su valor máximo, pensemos como se puede generar (una forma facil de empezar a pensar estas cosas es pensar que tienen los datos de un solo elemento y luego generalizar).
+
+Combinando el retraso en la salida y llegada podemos hacerla.
+
+Para esto podemos usar la función `mutate` que sirve para crear nuevas variables (o modificar las existentes) y creamos una nueva columna llamada `tiempo.ganado`. Veamos como se usa y lo intuitiva que es:
+
+```{r}
+nuevo.flights <- mutate(flights, tiempo.ganado = dep_delay - arr_delay)
+```
+
+Si quieren ver como quedó:
+
+```{r}
+glimpse(nuevo.flights)
+```
+
+Y ahora simplemente usamos `slice_max` para encontrar los cuatro vuelos que más tiempo ganaron en el aire.
+
+```{r}
+slice_max(nuevo.flights, tiempo.ganado, n=4) 
+```
+
+## Cambio de unidades con `group_by`
+
+Hasta ahora, todas las preguntas trataban sobre vuelos (la unidad de este data set), pensemos que queremos hacer otro tipo de preguntas, por ejemplo:
+
+*"¿Qué aerolínea realizó la mayor cantidad de vuelos durante el año?"*
+
+*"¿Qué aerolínea tiene la mayor cantidad de aviones?"*
+
+Este no es un dataset sobre aerolíneas, ok, ¿pero les parece que tenemos esa información repartida por ahí? (**SPOILER**: Si). Intuitivamente, ¿cómo se podría generar?.
+
+En general, para cambiar las unidades del dataset, necesitamos hacer un *agrupamiento* por la variable que queremos que funcione como nueva unidad.
+
+### 5. ¿Qué aeropuerto de salida tuvo más vuelos?
+
+Para empezar a responder esto introduzcamos la función `summarise`, esta función sirve para resumir el data set, o sea, toma una tabla y devuelve una sola línea con valores que salen de aplicar algo sobre todos los datos. Por ejemplo, si queremos obtener la cantidad total de vuelos la podemos usar junto con `n()` que simplemente devuelve la cantidad de filas del data set.
+
+```{r}
+summarise(flights, cantidad.de.vuelos=n())
+```
+
+Podemos devolver tantas columnas como querramos:
+
+```{r}
+summarise(flights, cantidad.de.vuelos=n(),suma.de.retrasos=sum(dep_delay, na.rm=T))
+```
+
+Bien, ahora volviendo a la pregunta, si en vez de *pensar* en vuelos, lo hicíeramos en aeropuertos de origen la cosa se pone un poco más facil, para esto usamos usamos `group_by` para, justamente, agrupar por aeropuerto de origen `summarise` se vuelve más interesante, porque hace los cálculos que pidamos **para cada grupo**:
+
+```{r}
+f.grupo <- group_by(flights, origin)
+
+# Calculo la cantidad de vuelos en cada aeropuerto de origen
+summarise(f.grupo, cantidad.de.vuelos=n())
+```
+
+Como contar cosas es algo que se hace tan frecuentemente, R tiene una función específica, que funciona de la misma forma, pero en un solo paso. Se trata de `count`:
+
+```{r}
+count(f.grupo)
+```
+
+O incluso a partir del dataset original, indicando sobre qué variable agrupar.
+
+```{r}
+count(flights, origin)
+```
+
+Las preguntas que siguen, se pueden responder con el mismo método, o combinando métodos.
+
+### 6. ¿Qué destino recibe más vuelos desde JFK?
+
+En este caso, tenemos que filtrar los vuelos que salen desde JFK y después agrupar por destino (y eventualmente ordenar para que sea más fácil encontrar la respuesta).
+
+```{r}
+vuelos.jfk <- filter(flights, origin=='JFK')
+conteo.vuelos.jfk <- count(vuelos.jfk, dest)
+slice_max(conteo.vuelos.jfk, n)
+```
+
+El destino que más vuelos recibe es `r slice_max(conteo.vuelos.jfk, n)$dest`, con `r slice_max(conteo.vuelos.jfk, n)$n` vuelos.
+
+### 7. ¿Qué mes del año tiene más vuelos?
+
+Acá podemos directamente contar agrupando por meses, lo que se puede hacer paso por paso
+
+```{r}
+vuelos.meses <- group_by(flights, month)
+
+conteo.vuelos <- summarise(vuelos.meses, cantidad.vuelos=n())
+
+resultado <- slice_max(conteo.vuelos, cantidad.vuelos)
+
+resultado
+```
+
+Hay más vuelos en "`r month.name[resultado$month]`", con `r resultado$cantidad.vuelos` vuelos.
