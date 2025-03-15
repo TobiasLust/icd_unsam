@@ -1,5 +1,6 @@
 library(tidyverse)
 
+
 # levantar dataset
 data <- read_csv('properati_SM_SPA.csv')
 
@@ -11,6 +12,7 @@ view(data)
 
 glimpse(data)
 
+unique(data$l4)
 
 # ver valores unicos de una columna 
 distinct(select(data, l4))
