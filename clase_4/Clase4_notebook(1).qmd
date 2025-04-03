@@ -1,0 +1,449 @@
+---
+title: "Clase 4 - Métricas descriptivas"
+format: 
+  html:
+    toc: true
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+# Métricas descriptivas (de resumen)
+
+## Hasta ahora
+
+-   Exploración del dataset
+
+-   Manipulación (ordenamiento, filtrado, agrupamiento, mutación)
+
+-   Distribuciones de parámetros
+
+En la **clase de hoy** vamos a ver métodos para describir un dataset de manera **cuantitativa** (es decir, dando *números* que lo describan de alguna manera).
+
+Para motivar la cuestión, vamos a intentar responder una pregunta aparentemente inocente, pero que encierra un montón de sutilezas:
+
+> ### ¿Cuánto salía viajar en el RMS Titanic?
+
+## El data set de Titanic
+
+Para empezar, leemos el dataset de Titanic, y recordamos qué variables traía con `glimpse`.
+
+```{r titanic, echo = TRUE}
+titanic <- read_csv('titanic.csv',
+                    locale=locale(decimal_mark=','))
+
+glimpse(titanic)
+```
+
+Por razones que serán evidentes después, usaremos solo los datos de la segunda y tercera clase
+
+```{r}
+titanic.sin1ra <- titanic %>% filter(class != 'First')
+```
+
+## En busca de una respuesta gráfica
+
+Hasta ahora, conocemos dos tipos de gráficas: las barras y la dispersión.
+
+¿Se les ocurre cómo podemos responder la pregunta sobre los precios de los boletos usando alguna de estas gráficas?
+
+...
+
+Intentemos con una gráfica de dispersión. El "problema" es que tenemos que usar dos columnas para hacer un gráfico de este tipo.
+
+Tal vez resulte natural ver cómo cambia el precio del pasaje según la variable
+
+```{r}
+#| echo: true
+ggplot(data=titanic.sin1ra) +
+  geom_point(aes(x=class, y=fare, color=class)) +
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Segunda', 'Tercera'))
+```
+
+### Una versión mejorada
+
+Los puntos se acumulan en algunos lugares, lo que no permite distinguir si hay muchos o pocos en ese lugar. Una posible mejoría es usar la transparencia de los puntos, con al parámetro `alpha`, o el `geom_jitter` que ya conocemos.
+
+```{r}
+ggplot(data=titanic.sin1ra) +
+  geom_point(aes(x=class, y=fare, color=class), alpha=0.1) +
+  scale_y_log10() +
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Segunda', 'Tercera'))
+```
+
+```{r}
+ggplot(data=titanic.sin1ra) +
+  # geom_jitter(aes(x=class, y=fare, color=class), height=0) +
+  geom_point(aes(x=class, y=fare, color=class),
+             position=position_jitter(height=0, seed=1234)) +
+  # scale_y_log10() +
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Segunda', 'Tercera'))
+```
+
+Por supuesto, como tenemos una sola variable numérica, tal vez lo mejor para explorar esta pregunta sea hacer un histograma, o un gráfico de densidad.
+
+```{r}
+ggplot(data=titanic.sin1ra) +
+  # geom_jitter(aes(x=class, y=fare, color=class), height=0) +
+  geom_histogram(aes(x=fare, y=after_stat(density), 
+                     fill=class), 
+                 binwidth = 2.5, alpha=0.5, 
+                 position = 'identity') +
+  # scale_y_log10() +
+  labs(x='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Segunda', 'Tercera'))
+```
+
+## Usa solución cuantitativa
+
+Evidentemente, no hay una manera sencilla de responder a la pregunta sobre el precio del boleto del Titanic. Como era de esperar, hay una dependencia con la clase, pero también vemos una variación importante dentro de cada clase (*intraclase*).
+
+¿Cómo podemos dar una respuesta numérica razonablemente acertada a esta pregunta?
+
+### Tendencia central
+
+Intuitivamente, lo primero que uno mira cuando se enfrenta a un gráfico como el de arriba es "dónde están los puntos (para cada grupo)". En otras palabras, uno calcula a ojo el promedio (o media) de los valores de cada grupo.
+
+$$
+<precio> = \frac{1}{N}\left(\text{precio}_1 + \text{precio}_2 + \ldots + \text{precio}_N\right)
+$$
+
+$$
+<precio> = \frac{1}{N} \sum_{i=1}^N \text{precio}_i
+$$
+
+En la práctica, nunca vamos a hacer el cálculo a mano, obviamente.
+
+Podemos calcular el valor medio (`mean`) de una columna de esta manera:
+
+```{r}
+mean(titanic.sin1ra$fare)
+```
+
+¿Cómo harían para calcularlo para cada clase usando las herramientas de `dplyr` que vimos las clases pasadas?
+
+```{r}
+titanic.sin1ra %>% group_by(class) %>% 
+  summarise(tarifa.media = mean(fare, na.rm=T))
+```
+
+Vamos a ver cómo podemos agregar el valor por grupo a la gráfica. Esto es muy fácil gracias a `ggplot2` usando `stat_summary`:
+
+```{r}
+ggplot(data=titanic.sin1ra, aes(x=class, y=fare, color=class)) +
+  geom_jitter(height=0) +
+  stat_summary(fun=mean, 
+               color='black', 
+               size=0.5) + 
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Segunda', 'Tercera'),
+                       guide='none')
+```
+
+Podemos hacer algo similar para el histograma, marcando una línea vertical
+
+```{r}
+medias.df <- titanic.sin1ra %>% group_by(class) %>% 
+  summarise(medias = mean(fare))
+ggplot(data=titanic.sin1ra) +
+  geom_histogram(aes(x=fare, y=after_stat(density), 
+                     fill=class), 
+                 binwidth = 2.5, alpha=0.5, 
+                 position = 'identity') +
+  geom_vline(data=medias.df, aes(xintercept=medias, color=class)) +
+  labs(x='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Segunda', 'Tercera'))
+```
+
+#### Robustez frente a puntos atípicos; la mediana
+
+El principal problema de la media es que es sensible a puntos atípicos. Esto puede verse comparando el histograma para tercera clase, que presenta un pico bien marcado, y la posición de la media está en valores mucho más elevados. También en el scatterplot, en el que el punto de tercera queda muy por arriba del lugar donde está la mayoría de los puntos.
+
+Podríamos pensar algo más dramático. Imaginen que en tercera clase alguien ingresó un valor equivocado y agregó unos ceros de más a una línea del dataset.
+
+¿Cómo cambia la media con esto?
+
+```{r}
+titanic.sin1ra %>% 
+  filter(class=='Third') %>% 
+  select(fare) %>% 
+  # Cambiamos el valor de la línea 10
+  mutate(fare.mal = if_else(row_number()==10, fare * 1000, fare)) %>% 
+  summarise(mean(fare), mean(fare.mal))
+```
+
+Para protegerse de estos efectos, una alternativa mucho más robusta frente a la presencia de valore atípicos es la **mediana**. La mediana es el valor que separa al dataset en dos partes iguales, o dos mitades. Para una variable dada, la mitad de las observaciones tienen valores inferiores a la mediana y la otra mitad tiene valores superiores a la mediana.
+
+Veamos algunos ejemplos (pueden comentar y descomentar distintas versiones de `df` para entender cómo se calcula la mediana:
+
+```{r}
+# df <- tibble(x = seq(1, 5))
+df <- tibble(x = seq(1, 6))
+df <- tibble(x = c(seq(1, 5), 1000))
+df <- tibble(x = c(rep(1, 5), 6))
+
+print(df)
+df %>% summarise(mean(x), median(x))
+```
+
+En casos más complejos, no es tan fácil entender cómo se encuentra la mediana.
+
+```{r}
+titanic.sin1ra %>% filter(class=='Third') %>% 
+  summarise(sum(fare < median(fare)),
+            sum(fare == median(fare)),
+            sum(fare > median(fare)))
+```
+
+Pero sí podemos ver que es más robusto frente a la presencia de puntos atípicos.
+
+```{r}
+titanic.sin1ra %>% 
+  filter(class=='Third') %>% 
+  select(fare) %>% 
+  mutate(fare.mal = if_else(row_number()==10, fare * 1000, fare)) %>% 
+  summarise(mean(fare), mean(fare.mal), median(fare), median(fare.mal))
+```
+
+Con el mismo `stat_summary` podemos agregar el valor en el gráfico de puntos.
+
+```{r}
+ggplot(data=titanic.sin1ra, aes(x=class, y=fare, color=class)) +
+  geom_jitter(height=0) +
+  stat_summary(fun=mean, 
+               color='black', 
+               size=0.5) + 
+  stat_summary(fun=median, 
+               color='DarkGreen', 
+               size=0.5) + 
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Primera', 'Segunda', 'Tercera'),
+                       guide='none')
+```
+
+### Percentiles
+
+Otra descripción posible de la distribución de los valores es a través de los percentiles. La mediana divide en dataset en dos partes iguales, pero podemos generalizar esta idea y calcular los valores que dejan cualquier fracción de datos por debajo de ese valor. El valor que deja q% de los datos por debajo se llama el percentil q.
+
+Así, el percentil 25 (o cuantil 0.25) de una distribución, deja al 25% de los datos por debajo. Vamos el valor de los percentiles 25 y 75 de los precios para cada clase.
+
+```{r}
+titanic %>% 
+  group_by(class) %>% 
+  summarise(Q25 = quantile(fare, 0.25, na.rm=T),
+            mediana = median(fare, na.rm=T),
+            Q75 = quantile(fare, 0.75, na.rm=T),) %>% view()
+```
+
+Estos dos valores se llaman el **primer cuartil** y el **tercer cuartil** y son valores muy usados para describir un conjunto de datos. De hecho, junto con la mediana (**el segundo cuartil**) y los valores máximos y mínimos, son los **cinco números** más usados para describir un conjunto de datos. Tanto es así, que la salida de un `summary` a un vector de datos numéricos, devuelve esos números (ver también `fivenum`)
+
+```{r}
+df <- titanic.sin1ra %>% dplyr::filter(class=='Third')
+fivenum(df$fare)
+```
+
+### Dispersión
+
+Otra característica que puede interesar estudiar de una distribución es la dispersión, es decir, cuán desparramados están los valores de una variable
+
+Una idea razonable sería ver las distancias al valor central (ya sea la mediana o el promedio, llamémoslo $<\text{precio}>$). Tenemos uno de estos valores para cada observación; usemos `dplyr` para calcularlo
+
+```{r}
+titanic.sin1ra %>% group_by(class) %>% 
+  mutate(desvio = fare - median(fare)) %>% 
+  select(fare, desvio)
+```
+
+Vemos valores positivos y valores negativos. Calculemos la media y la mediana de estos valores.
+
+```{r}
+titanic.sin1ra %>% group_by(class) %>% 
+  mutate(desvio = fare - median(fare)) %>% 
+  select(fare, desvio) %>% 
+  summarise(desvio.medio = mean(desvio), desvio.mediana = median(desvio))
+```
+
+#### Preguntas
+
+-   ¿El resultado que obtenemos es más o menos lo que hubieran esperado?
+-   ¿Qué les parece que está pasando?
+
+#### Desvío absoluto mediano
+
+El problema de las dispersiones entorno a un valor central es que necesitamos deshacernos del signo de alguna manera, para que no se compensen positivos y negativos.
+
+Lo primero que se nos ocurre es obtener el valor absoluto de los desvíos antes de calcular media y mediana.
+
+```{r}
+titanic.sin1ra %>% group_by(class) %>% 
+  mutate(desvio.absoluto = abs(fare - median(fare))) %>% 
+  select(fare, desvio.absoluto) %>% 
+  summarise(mad=median(desvio.absoluto), mmad = mean(desvio.absoluto))
+```
+
+```{r}
+titanic.sin1ra %>% group_by(class) %>% 
+  mutate(desvio.absoluto = abs(fare - median(fare))) %>% 
+  select(fare, desvio.absoluto) %>% 
+  ggplot(aes(x=class, y=desvio.absoluto)) +
+  geom_jitter(aes(color=class),
+              size=0.5) +
+  stat_summary(fun=median,
+               color='green') +
+  stat_summary(fun=mean,
+               color='black')
+  
+
+```
+
+```{r}
+titanic.sin1ra %>% group_by(class) %>% 
+  summarise(mad=mad(fare, constant = 1))
+```
+
+#### Desvío estándar
+
+Una forma adicional de sacarse de encima el signo es elevando al cuadrado. Por razones que no van a ver hasta Probabilidad y Estadística, eso da lugar a una métrica muy usada y bien importante, el desvío estándar, $\sigma$, tal que:
+
+$$
+\sigma^2 = \frac{1}{(N - 1)}\Sigma_{i=1}^N \left(\text{precio}_i - <\text{precio}>\right)^2
+$$
+
+```{r}
+titanic.sin1ra %>% group_by(class) %>% 
+  summarise(mad=mad(fare), desvio.est = sd(fare))
+```
+
+**Pregunta**: ¿pueden identificar algún punto en contra de esta métrica?
+
+#### IQR
+
+Finalmente, otra manera robusta de expresar la dispersión de un conjunto de valores es usar la diferencia entre los percentiles 75 y 25; esto se llama **rango intercuartil**, o IQR
+
+```{r}
+titanic.sin1ra %>% group_by(class) %>% 
+  summarise(mad=mad(fare, constant = 1), desvio.est = sd(fare), iqr = IQR(fare)) %>% view()
+```
+
+## Gráfica de cajas
+
+Mucho de lo que vimos puede incorporarse en una gráfica extremadamente práctica y muy usada. Sirve principalmente para explorar
+
+```{r}
+ggplot(data=titanic.sin1ra, aes(x=class, y=fare, color=class)) +
+  geom_jitter(height=0, width=0.3, size=0.5) +
+  geom_boxplot(alpha=0.2,
+               coef = 1.5,
+               outliers = F) +
+ # scale_y_log10() +
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Segunda', 'Tercera'),
+                       guide='none') +
+  coord_cartesian(ylim=c(0, 100))
+```
+
+## Gráfica de violines
+
+Otro tipo de gráfico que es muy útil, combina los gráficos de densidades que vimos la semana pasada con algunas ideas del gráfico de cajas, para dar lugar al gráfico de violines.
+
+```{r}
+ggplot(data=titanic.sin1ra, aes(x=sex, y=fare, color=sex)) +
+  # geom_jitter(height=0, width=0.3, size=0.5) +
+  geom_violin(alpha=0.2) +
+ # scale_y_log10() +
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  # scale_color_discrete(labels=c('Segunda', 'Tercera'),
+  #                      guide='none') +
+  facet_wrap(~class)
+  # coord_cartesian(ylim=c(0, 100))
+
+```
+
+La gráfica se construye a partir de la estimación de densidad de cada distribución, puesta en forma vertical y duplicada.
+
+```{r}
+ggplot(data=titanic.sin1ra, aes(x=fare, color=class)) +
+  geom_density() +
+  # stat_density(aes(x=fare, y=-after_stat(density)), 
+  #              geom='density') +
+  labs(y='Densidad', x='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Segunda', 'Tercera'),
+                       )
+
+```
+
+------------------------------------------------------------------------
+
+## Ejercicio
+
+1.  Repitan los gráficos incluyendo la primera clase. ¿Qué característica ven de este conjunto?
+2.  Anticipen cómo se comportará la media y la mediana para estos valores. ¿Qué pasará con el desvío estándar y con el MAD?
+3.  Repitan los cálculos de las métricas para la primera clase.
+4.  Relacionen el comportamiento de cada métrica con la característica que detectaron en el gráfico en el punto uno
+
+------------------------------------------------------------------------
+
+## Extra
+
+```{r}
+ggplot(data=titanic, aes(x=class, y=fare, color=class)) +
+  geom_jitter(height=0) +
+  stat_summary(fun=mean, 
+               fun.max=max,
+               fun.min=min,
+               color='black', size=0.5) + 
+  scale_y_log10() +
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Primera', 'Segunda', 'Tercera'),
+                       guide='none')
+```
+
+```{r}
+ggplot(data=titanic, aes(x=class, y=fare, color=class)) +
+  geom_jitter(height=0) +
+  stat_summary(fun=mean, 
+               fun.max=~quantile(.x, probs=.75),
+               fun.min=~quantile(.x, probs=.25),
+               color='black', size=0.5) + 
+  scale_y_log10() +
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Primera', 'Segunda', 'Tercera'),
+                       guide='none')
+
+```
+
+```{r warning=FALSE}
+ggplot(data=titanic, aes(x=class, y=fare, color=class)) +
+  geom_jitter(height=0) +
+  stat_summary(fun=median, 
+               fun.max=~quantile(.x, probs=.75),
+               fun.min=~quantile(.x, probs=.25),
+               color='black', size=0.5) + 
+  stat_summary(fun=mean,
+                shape=4, color='black') + 
+  #scale_y_log10() +
+  labs(x='Clase', y='Tarifa [alguna moneda]',
+       color='Clase') +
+  scale_color_discrete(labels=c('Primera', 'Segunda', 'Tercera'),
+                       guide='none') +
+  scale_x_discrete(limits=c('First')) +
+  coord_cartesian(ylim=c(0, 100))
+```
