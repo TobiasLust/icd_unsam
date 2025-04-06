@@ -18,6 +18,7 @@ df_resumen <- df_filt %>%
   summarise(prom_alt = mean(altura_arbol,na.rm=T))%>%
   arrange(desc(prom_alt))
 
+<<<<<<< HEAD
 df <- df%>%group_by(nombre_cientifico)%>%
   mutate(altura_max = max(altura_arbol,na.rm=T))
 
@@ -88,3 +89,53 @@ df_filt %>%
        x = "Especie",
        y = "Altura del Árbol (m)") +
   scale_fill_brewer(palette = "Set2")
+=======
+
+df_n_cientf %>%
+  ggplot(aes(x=nombre_cientifico,y=altura_arbol))+
+  geom_jitter(width = 0.3, height = 0.3)
+
+df_resumen <- df_n_cientf%>%
+  group_by(nombre_cientifico)%>%
+  summarise(prom = mean(altura_arbol, na.rm=T), altura_max = max(altura_arbol,na.rm=T))
+
+
+max_fraxinus <- df_resumen[df_resumen$nombre_cientifico=='Fraxinus excelsior',]$altura_max
+
+
+new_df <-  mutate(df,altura_arbol = if_else(altura_arbol == max_fraxinus &
+                                             nombre_cientifico == 'Fraxinus excelsior',
+                                           max_fraxinus/10,
+                                           altura_arbol) )
+
+
+df_new <- new_df%>%
+  group_by(nombre_cientifico)%>%
+  summarise(prom = mean(altura_arbol, na.rm=T), altura_max = max(altura_arbol,na.rm=T))
+
+
+#mediana
+quantile(df$altura_arbol, probs = c(0.05, 0.5, 0.95), na.rm=TRUE)
+
+
+df_especie <- df %>%
+  group_by(nombre_cientifico)%>%
+  summarise(altura_max = max(altura_arbol,na.rm=T),cuantil_05=quantile(altura_arbol,probs=0.5,na.rm=T),cuantil_095=quantile(altura_arbol,probs=0.95,na.rm=T))
+
+
+
+media <- df %>% group_by(nombre_cientifico) %>%
+  summarise(name = c('min', '1st', 'median', '3rd', 'max'), value =
+              fivenum(altura_arbol))%>%
+  pivot_wider(names_from=name, values_from=value)
+
+
+df_n_cientf %>%
+  ggplot(aes(x=nombre_cientifico,y=altura_arbol))+
+  geom_boxplot(aes(alpha = 0.4))
+
+df_n_cientf %>%
+  ggplot(aes(x=nombre_cientifico,y=altura_arbol))+
+  geom_violin(draw_quantiles =
+                c(0.25, 0.5, 0.75))
+>>>>>>> f4b1096 (clase5)
